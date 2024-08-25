@@ -1,0 +1,5 @@
+dataset: "alpaca_sample"
+dataset_samples: 512
+context_length: 512
+batch_size: 1
+gradient_accumulation_steps: 1

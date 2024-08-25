@@ -1,0 +1,12 @@
+profile: False
+profiling_output: "profiles"
+overwrite_profiling_output: True
+with_stack: False
+with_shapes: False
+export_trace: True
+export_memory_timeline: False
+wait_steps: 1
+warmup_steps: 1
+active_steps: 2
+repeat: 0
+profiling_frequency: 10

@@ -1,0 +1,6 @@
+lr: 1e-5
+lr_scheduler: "constant"
+optimizer: "adamw"
+apply_gradient_clipping: False
+grad_norm: 0.3
+wd: 0.1

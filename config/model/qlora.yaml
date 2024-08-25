@@ -1,0 +1,14 @@
+model_name: "meta-llama/Llama-2-7b-hf"
+train_type: "qlora"
+lora_rank: 64
+lora_alpha: 16
+lora_dropout: 0.1
+lora_target_modules: "all"
+precision: "bf16"
+n_bits: 4
+use_gradient_checkpointing: True
+reentrant_checkpointing: False
+use_cpu_offload: True
+use_activation_cpu_offload: False
+low_memory: True
+llama_pro_path: null
