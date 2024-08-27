@@ -17,7 +17,6 @@ models, we'd suggest holding off for a few months while the community more fully
 # General
 import functools
 import os
-import sys
 import time
 import types
 from contextlib import nullcontext
@@ -26,7 +25,6 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import hydra
-from omegaconf import DictConfig
 import safetensors
 import torch
 import torch.distributed as dist
@@ -37,11 +35,11 @@ from accelerate.utils import set_seed
 # Model loading
 from bitsandbytes.nn import Linear4bit, Params4bit
 from fastcore.parallel import parallel
+from omegaconf import DictConfig
 
 # Argument parsing
 from packaging.version import parse
 from safetensors.torch import save_file
-from peft.tuners import PrefixEncoder, PromptEmbedding, PromptEncoder
 
 # Torch + distributed training
 from torch import Tensor, nn
@@ -66,7 +64,10 @@ from tqdm.auto import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, hub
 
+from profiling_utils import profiling_context
 from scripts.dataset import get_dataloader
+from scripts.dora import BNBDORA, HQQDORA, DORALayer, MagnitudeLayer
+from scripts.lora import LORA
 from scripts.optimizer import get_lr_scheduler, get_optimizer
 
 try:
@@ -96,13 +97,6 @@ try:
     import wandb
 except ImportError:
     pass
-
-# LoRA and DORA modules
-sys.path.append("./scripts")
-from dora import BNBDORA, HQQDORA, DORALayer, MagnitudeLayer
-from lora import LORA
-
-from profiling_utils import profiling_context
 
 
 class Logger:
@@ -770,9 +764,12 @@ def fsdp_main(
     init_end_event = torch.cuda.Event(enable_timing=True)
 
     # model precision, qlora compute precison, and FSDP mixed precision policy.
-    # The Linear4Bit quant_storage dtype should always match the FSDP param_dtype. The compute_dtype should match the AMP compute dtype.
-    # MixedPrecision(param_dtype=fp32, reduce_dtype=fp32, buffer_dtype=fp32) uses `torch.amp.autocast` to control precision.
-    # limited qlora testing shows that fp16 only works with autocast while bf16 trains with both pure and autocast modes.
+    # The Linear4Bit quant_storage dtype should always match the FSDP param_dtype.
+    # The compute_dtype should match the AMP compute dtype.
+    # MixedPrecision(param_dtype=fp32, reduce_dtype=fp32, buffer_dtype=fp32) uses
+    # `torch.amp.autocast` to control precision.
+    # limited qlora testing shows that fp16 only works with autocast while bf16
+    # trains with both pure and autocast modes.
     # TODO: test how often this holds for mp_fp16
 
     # Load tokenizer
@@ -908,9 +905,9 @@ def fsdp_main(
             else CheckpointImpl.NO_REENTRANT,
         )
 
-        check_fn = lambda submodule: isinstance(
-            submodule, (LlamaDecoderLayer, MistralDecoderLayer)
-        )
+        def check_fn(submodule):
+            return isinstance(submodule, (LlamaDecoderLayer, MistralDecoderLayer))
+
         if rank == 0 or train_args["verbose"]:
             print("Applying activation checkpointing", rank)
         apply_activation_checkpointing(
@@ -1278,11 +1275,13 @@ def validate_args(args):
         "hqq_llama_pro",
     ]:
         raise ValueError(
-            f"train_type={args['train_type']} doesn't support n_bits={args['n_bits']}. Either don't pass n_bits (to use default of 4) or use any of the hqq training types."
+            (
+                f"""train_type={args['train_type']} doesn't support n_bits={args['n_bits']}."""
+                """Either don't pass n_bits (to use default of 4) or use any of the hqq training types."""
+            )
         )
 
 
-# Main entry point, validate and package arguments, then call fsdp_main. Scripts importing train.py as an import can invoke this function (invoking main() directly leads to call_parse() overwriting arguments).
 @hydra.main(config_path="config", config_name="config")
 def fsdp_qlora(cfg: DictConfig):
     """
@@ -1301,11 +1300,14 @@ def fsdp_qlora(cfg: DictConfig):
         dataset_samples: Number of samples in an epoch if using "alpaca_sample" or "dummy" dataset
         sharding_strategy: Sharding strategy for FSDP
         use_gradient_checkpointing: Use FSDP's activation checkpointing
-        reentrant_checkpointing: Use re-entrant autograd activation checkpointing. Setting to True can use less GPU memory with BNB QLoRA
+        reentrant_checkpointing: Use re-entrant autograd activation checkpointing.
+            Setting to True can use less GPU memory with BNB QLoRA
         use_cpu_offload: Use FSDP's CPU offloading
         use_activation_cpu_offload: Use FSDP's activation CPU offloading
-        low_memory: Load one copy of the model into CPU memory before sharding with FSDP. For QLoRA, quantizes each layer individually on GPU before placing on CPU.
-        no_sync: Prevent gradient sync until update step. Likely uses more memory. Required for `use_cpu_offload` and `gradient_accumulation_steps > 1`
+        low_memory: Load one copy of the model into CPU memory before sharding with FSDP.
+            For QLoRA, quantizes each layer individually on GPU before placing on CPU.
+        no_sync: Prevent gradient sync until update step. Likely uses more memory.
+            Required for `use_cpu_offload` and `gradient_accumulation_steps > 1`
         precision: Training precision. autocast precisions use mixed precision
         model_name: Which model to train - e.g. "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
         save_model: Save the resulting model
@@ -1319,10 +1321,12 @@ def fsdp_qlora(cfg: DictConfig):
         apply_gradient_clipping: Apply gradient norm clipping
         grad_norm: Gradient norm clipping
         wd: Weight decay
-        profile_memory: Profile memory usage for the first few batches. Keep false for training. May increase memory usage.
+        profile_memory: Profile memory usage for the first few batches.
+            Keep false for training. May increase memory usage.
         optimizer: Optimizer. PyTorch 2.4 nightly adds CPU fused Adam/AdamW which should improve offload training speed.
         lr_scheduler: Learning Rate Scheduler. linear and cosine warm up for 10% of training steps.
-        loading_workers: Number of layers to load and quantize in parallel per GPU. Default of -1 uses heuristics to set worker count.
+        loading_workers: Number of layers to load and quantize in parallel per GPU.
+            Default of -1 uses heuristics to set worker count.
         log_to: Where to log output
         master_addr: For distributed training
         master_port: For distributed training, must be the same for all processes
@@ -1384,13 +1388,23 @@ def fsdp_qlora(cfg: DictConfig):
         and parse(torch.__version__) < parse("2.4dev")
     ):
         raise ValueError(
-            f"Optimizer '{args['optimizer']}' with `use_cpu_offload=True` requires at least PyTorch 2.4 Nightly with fused Adam/AdamW CPU support."
+            (
+                f"""Optimizer '{args['optimizer']}' with `use_cpu_offload=True`"""
+                """requires at least PyTorch 2.4 Nightly with fused Adam/AdamW CPU support."""
+            )
         )
 
     # Run
     mp.spawn(
         fsdp_main,
-        args=(world_size, args["data"], args["training"], args["profling"], args["optimizer"]), args["model"],
+        args=(
+            world_size,
+            args["data"],
+            args["training"],
+            args["profling"],
+            args["optimizer"],
+            args["model"],
+        ),
         nprocs=torch.cuda.device_count(),
         join=True,
     )

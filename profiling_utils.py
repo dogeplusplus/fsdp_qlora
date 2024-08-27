@@ -11,7 +11,6 @@ import logging
 import torch
 import torch.distributed
 from functools import partial
-import shutil
 from torch.profiler import tensorboard_trace_handler
 
 WARMUP = 3
@@ -57,7 +56,7 @@ def trace_handler(
             prof.export_memory_timeline(
                 f"{curr_trace_dir}/rank{rank}_memory-timeline.html"
             )
-        except:
+        except Exception:
             logger.info(
                 "Failed to export memory timeline to html, retrying as gzipped json."
             )
@@ -65,7 +64,7 @@ def trace_handler(
                 prof.export_memory_timeline(
                     f"{curr_trace_dir}/rank{rank}_memory-timeline.json.gz"
                 )
-            except:
+            except Exception:
                 logger.info(
                     "Failed to export memory timeline to gzipped json. Saving profiler timeline object instead."
                 )
@@ -141,7 +140,6 @@ def profiling_context(
         )
 
         profile_memory = export_memory_timeline
-        export_memory_timeline = export_memory_timeline
         with_stack = with_stack or export_memory_timeline
         with_shapes = with_shapes or export_memory_timeline
         callback = partial(
