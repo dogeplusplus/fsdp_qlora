@@ -1,0 +1,74 @@
+{
+	"files": [
+		{
+			"path": "train.py",
+			"bookmarks": [
+				{
+					"line": 238,
+					"column": 0,
+					"label": "Refactor: Separate out the initial model load and quantization from the main training function"
+				},
+				{
+					"line": 392,
+					"column": 0,
+					"label": "Determine compute types outside of train function"
+				},
+				{
+					"line": 429,
+					"column": 0,
+					"label": "Prepare quantized model outside of train function"
+				},
+				{
+					"line": 1284,
+					"column": 26,
+					"label": "Replace with hydra entrypoint"
+				},
+				{
+					"line": 1356,
+					"column": 10,
+					"label": "Need to ensure the same naming convention for attention layers"
+				}
+			]
+		},
+		{
+			"path": "config/train/train.yaml",
+			"bookmarks": [
+				{
+					"line": 0,
+					"column": 7,
+					"label": "Separate out some of the training configuration"
+				}
+			]
+		},
+		{
+			"path": "config/dataset/dataset.yaml",
+			"bookmarks": [
+				{
+					"line": 0,
+					"column": 5,
+					"label": "Dataset Configuration"
+				}
+			]
+		},
+		{
+			"path": "config/optimizer/optimizer.yaml",
+			"bookmarks": [
+				{
+					"line": 0,
+					"column": 6,
+					"label": "Optimizer configuration"
+				}
+			]
+		},
+		{
+			"path": "config/model/qlora.yaml",
+			"bookmarks": [
+				{
+					"line": 0,
+					"column": 0,
+					"label": "Model + LoRA configuration"
+				}
+			]
+		}
+	]
+}
