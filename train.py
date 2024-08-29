@@ -1345,16 +1345,15 @@ def fsdp_qlora(cfg: DictConfig):
     print(f"World size: {world_size}")
 
     # Get all args which will be passed to fsdp_main
-    args = dict(locals())
-    set_seed(args["seed"])
-    validate_args(args)
-    if args["verbose"]:
-        print(args)
+    set_seed(cfg["seed"])
+    validate_args(cfg)
+    if cfg["verbose"]:
+        print(cfg)
 
     # If lora_target_modules is 'all', set sensible defaults for llama + mistral type modules
     # See peft.utils.constants -> TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING for the current defaults
     if cfg["lora_target_modules"] == "all":
-        args["lora_target_modules"] = [
+        cfg["lora_target_modules"] = [
             "k_proj",
             "q_proj",
             "v_proj",
@@ -1363,33 +1362,33 @@ def fsdp_qlora(cfg: DictConfig):
             "gate_proj",
         ]
     elif cfg["lora_target_modules"].lower() == "default":
-        args["lora_target_modules"] = None
+        cfg["lora_target_modules"] = None
 
     if (
-        args["precision"] in ["bf16", "bf16_autocast", "bf16_buffers_autocast"]
+        cfg["precision"] in ["bf16", "bf16_autocast", "bf16_buffers_autocast"]
         and not torch.cuda.is_bf16_supported()
     ):
         raise ValueError("Current device does not support bfloat16")
 
     # Set no_sync if using cpu_offload and gradient accumulation. Turn off if not using gradient accumulation
-    if args["use_cpu_offload"] and args["gradient_accumulation_steps"] > 1:
-        args["no_sync"] = True
-    elif args["no_sync"] and args["gradient_accumulation_steps"] == 1:
-        args["no_sync"] = False
+    if cfg["use_cpu_offload"] and cfg["gradient_accumulation_steps"] > 1:
+        cfg["no_sync"] = True
+    elif cfg["no_sync"] and cfg["gradient_accumulation_steps"] == 1:
+        cfg["no_sync"] = False
 
-    if args["train_type"] in ["hqq_lora"] and HQQLinear is None:
+    if cfg["train_type"] in ["hqq_lora"] and HQQLinear is None:
         raise ValueError(
             "HQQ is required to train with `train_type='hqq_lora'`. See ReadMe for details."
         )
 
     if (
-        args["optimizer"] in ["fused_adam", "fused_adamw"]
-        and args["use_cpu_offload"]
+        cfg["optimizer"] in ["fused_adam", "fused_adamw"]
+        and cfg["use_cpu_offload"]
         and parse(torch.__version__) < parse("2.4dev")
     ):
         raise ValueError(
             (
-                f"""Optimizer '{args['optimizer']}' with `use_cpu_offload=True`"""
+                f"""Optimizer '{cfg['optimizer']}' with `use_cpu_offload=True`"""
                 """requires at least PyTorch 2.4 Nightly with fused Adam/AdamW CPU support."""
             )
         )
@@ -1399,11 +1398,11 @@ def fsdp_qlora(cfg: DictConfig):
         fsdp_main,
         args=(
             world_size,
-            args["data"],
-            args["training"],
-            args["profling"],
-            args["optimizer"],
-            args["model"],
+            cfg["data"],
+            cfg["training"],
+            cfg["profling"],
+            cfg["optimizer"],
+            cfg["model"],
         ),
         nprocs=torch.cuda.device_count(),
         join=True,
